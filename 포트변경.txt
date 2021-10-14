@@ -1,0 +1,7 @@
+ssh포트 변경법 ubuntu 버전
+
+sudo vi /etc/ssh/sshd_config 에 가서
+#Port 22 밑에
+Port 60003 이렇게 하고 저장
+
+sudo service sshd restart

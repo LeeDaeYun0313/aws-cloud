@@ -1,0 +1,180 @@
+web,was 보안그룹 8080 80 22  다열어주고
+public에 넣어주기 이미지 따기전이니까
+
+------web-------------
+sudo su -
+apt update
+apt-get install apache2
+systemctl start apache2
+systemctl enable apache2
+vi /etc/apache2/sites-available/000-default.conf   가서 
+
+ProxyRequests Off
+    <Proxy *>
+        Order deny,allow
+        Allow from all
+    </Proxy>
+
+    ProxyPass / http://127.0.0.1:8080/                        //<<was ip
+    ProxyPassReverse / http://127.0.0.1:8080/              // <<was ip
+
+a2enmod proxy
+a2enmod proxy_http
+service apache2 restart
+----------------------------------- was---------------------------
+sudo su -
+apt update
+sudo apt install default-jdk
+sudo useradd -r -m -U -d /opt/tomcat -s /bin/false tomcat
+wget https://archive.apache.org/dist/tomcat/tomcat-9/v9.0.27/bin/apache-tomcat-9.0.27.tar.gz -P /tmp
+tar xf /tmp/apache-tomcat-9*.tar.gz -C /opt/tomcat
+ln -s /opt/tomcat/apache-tomcat-9.0.27 /opt/tomcat/latest
+sudo chown -RH tomcat: /opt/tomcat/latest
+sudo sh -c 'chmod +x /opt/tomcat/latest/bin/*.sh'
+sudo vi /etc/systemd/system/tomcat.service 에 밑에거 넣어주기
+
+
+# /etc/systemd/system/tomcat.service
+
+[Unit]
+Description=Tomcat 9 servlet container
+After=network.target
+
+[Service]
+Type=forking
+
+User=tomcat
+Group=tomcat
+
+Environment="JAVA_HOME=/usr/lib/jvm/default-java"
+Environment="JAVA_OPTS=-Djava.security.egd=file:///dev/urandom -Djava.awt.headless=true"
+
+Environment="CATALINA_BASE=/opt/tomcat/latest"
+Environment="CATALINA_HOME=/opt/tomcat/latest"
+Environment="CATALINA_PID=/opt/tomcat/latest/temp/tomcat.pid"
+Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseParallelGC"
+
+ExecStart=/opt/tomcat/latest/bin/startup.sh
+ExecStop=/opt/tomcat/latest/bin/shutdown.sh
+
+[Install]
+WantedBy=multi-user.target
+
+
+
+sudo systemctl daemon-reload
+sudo systemctl start tomcat
+
+
+cd /opt/tomcat/apache-tomcat-9.0.27/lib 디렉토리에서 wget https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.23/mysql-connector-java-8.0.23.jar
+systemctl restart tomcat
+systemctl enable tomcat
+
+sudo vi /opt/tomcat/latest/conf/tomcat-users.xml 여기에서
+-------------------------------------------------------------
+<tomcat-users>
+<role rolename="manager-script"/>
+    <role rolename="manager-gui"/>
+    <role rolename="manager-jmx"/>
+    <role rolename="manager-status"/>
+    <user username="tomcat" password="tomcat" roles="manager-gui,manager-script,manager-status,manager-jmx"/>
+</tomcat-users>
+---------------------------------------------------------------------
+sudo vi /opt/tomcat/latest/webapps/manager/META-INF/context.xml 에서
+-----------------------------------------------------------------
+<Context antiResourceLocking="false" privileged="true" >
+<!--
+  <Valve className="org.apache.catalina.valves.RemoteAddrValve"
+         allow="127\.\d+\.\d+\.\d+|::1|0:0:0:0:0:0:0:1" />
+-->
+</Context>
+------------------------------------------------------------------
+해주기  Valve className 을 처음부터 끝까지 주석처리
+
+sudo vi /opt/tomcat/latest/webapps/host-manager/META-INF/context.xml
+---------------------------------------------------------------------
+<Context antiResourceLocking="false" privileged="true" >
+<!--
+  <Valve className="org.apache.catalina.valves.RemoteAddrValve"
+         allow="127\.\d+\.\d+\.\d+|::1|0:0:0:0:0:0:0:1" />
+-->
+</Context>
+------------------------------------------------------
+해주기  Valve className 을 처음부터 끝까지 주석처리
+그후
+systemctl restart tomcat
+cd ~
+
+git clone https://github.com/SteveKimbespin/petclinic_btc.git 
+cd petclinic_btc 그후에 pom.xml 에 mysql 부분 수정
+apt-get install mysql-client
+
+./mvnw tomcat7:deploy
+./mvnw tomcat7:redeploy -P MySQL
+ systemctl restart tomcat
+
+
+// 밑에는 테스트용 test.jsp 할때 하는것
+
+vi /opt/tomcat/apache-tomcat-9.0.27/webapps/ROOT/test.jsp
+
+
+<%@ page import = "java.net.InetAddress" %>
+<%@ page import = "java.sql.*" %>
+<html>
+  <head>
+    <title>Hello from JSP</title>
+    <%!
+      String message = "Hello World. From JSP test page Tomcat is running.";
+      %>
+    <%
+      InetAddress inet= InetAddress.getLocalHost();
+      %>
+  </head>
+  <body>
+    <hr color="#000000" />
+    <center>
+    <h2><font color="#3366cc"><%= message%></font></h2>
+    <h3><font color="#0000ff"><%= new java.util.Date()%></font></h3>
+    <hr color="#000000" />
+    <h3><%=application.getServerInfo()%></h3>
+    <h3>Host Name : <%=inet.getHostName() %></h3>
+    <h3>Host Address : <%=inet.getHostAddress() %></h3>
+    <h3>Client IP : <%=request.getRemoteAddr()%></h3>
+    <h3>Client IP(X-FORWARDED-FOR) : <%=request.getHeader("x-forwarded-for")%></h3>
+    <hr color="#000000" />
+    <h3>ALL HTTP HEADERS</h3>
+    <font><% java.util.Enumeration names = request.getHeaderNames();
+      while(names.hasMoreElements()){
+          String name = (String) names.nextElement();
+          out.println(name + ":<BR>" + request.getHeader(name) + "<BR><BR>");
+      }%>
+    </font>
+    <hr color="#000000" />
+    <h3>MYSQL CONNECTION TEST</h3>
+    <font>
+    <%
+      Connection conn = null;
+      try{
+        String Url="jdbc:mysql://db.chwrest56xbb.ap-northeast-2.rds.amazonaws.com/Nike";
+        String Id="admin";
+        String Pass="It12345!";
+        
+        Class.forName("com.mysql.jdbc.Driver");
+        conn=DriverManager.getConnection(Url,Id,Pass);
+        
+        out.println("DB Connected");
+      
+      } catch(Exception e) {
+        out.println(e.toString());
+      }
+      %>
+    </font>
+  </body>
+</html>
+
+넣기   url, id, pass 수정
+그리고 커넥트되는지 확인
+
+
+
